@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   MessageCircle,
@@ -6,18 +6,14 @@ import {
   ThumbsUp,
   MoreHorizontal,
 } from "lucide-react";
-
 import {
   toggleLikeApi,
   deletePostApi,
   toggleBookmarkApi,
 } from "../../api/posts.js";
-
 import { useAuth } from "../../context/AuthContext.jsx";
-
 import EditPostModal from "../EditPostModal/EditPostModal.jsx";
 import SharePostModal from "../SharePostModal/SharePostModal.jsx";
-
 import {
   getPostOwnerId,
   getPostOwnerName,
@@ -86,6 +82,69 @@ function getInitialSaved(post, myId, postId) {
   }
 }
 
+function getSharedOriginal(post) {
+  return (
+    post?.sharedPost ||
+    post?.originalPost ||
+    post?.post ||
+    post?.sharedFrom ||
+    post?.parentPost ||
+    null
+  );
+}
+
+function SharedPreview({ original }) {
+  if (!original) return null;
+
+  const ownerName =
+    original?.user?.name ||
+    original?.createdBy?.name ||
+    original?.owner?.name ||
+    original?.postCreator?.name ||
+    "User";
+
+  const ownerPhoto =
+    original?.user?.photo ||
+    original?.user?.profilePhoto ||
+    original?.user?.image ||
+    original?.user?.avatar ||
+    original?.createdBy?.photo ||
+    original?.owner?.photo ||
+    original?.postCreator?.photo ||
+    "";
+
+  return (
+    <div className="mx-4 mb-4 overflow-hidden rounded-2xl border bg-slate-50">
+      <div className="flex items-center gap-3 px-4 py-3">
+        <Avatar user={{ name: ownerName, photo: ownerPhoto }} />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-extrabold text-slate-900">
+            {ownerName}
+          </p>
+          <p className="text-xs text-slate-500">Original post</p>
+        </div>
+      </div>
+
+      {original?.body && (
+        <div className="px-4 pb-3 text-[14px] text-slate-800">
+          {original.body}
+        </div>
+      )}
+
+      {original?.image && (
+        <img
+          src={original.image}
+          alt="shared post"
+          className="w-full max-h-[420px] object-cover"
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+        />
+      )}
+    </div>
+  );
+}
+
 function PostCardBase({ post, onChanged }) {
   const { user } = useAuth();
   const myId = user?._id || user?.id;
@@ -94,6 +153,7 @@ function PostCardBase({ post, onChanged }) {
   const ownerName = useMemo(() => getPostOwnerName(post), [post]);
   const ownerPhoto = useMemo(() => getPostOwnerPhoto(post), [post]);
   const postId = useMemo(() => getPostId(post), [post]);
+  const sharedOriginal = useMemo(() => getSharedOriginal(post), [post]);
 
   const [likes, setLikes] = useState(() => normalizeLikeIds(post?.likes));
   const [liking, setLiking] = useState(false);
@@ -103,10 +163,6 @@ function PostCardBase({ post, onChanged }) {
   const [editOpen, setEditOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    setSaved(getInitialSaved(post, myId, postId));
-  }, [post, myId, postId]);
 
   const isLiked = myId ? likes.includes(myId) : false;
   const canEdit = ownerId === myId;
@@ -166,6 +222,7 @@ function PostCardBase({ post, onChanged }) {
     try {
       await toggleBookmarkApi(postId);
       localStorage.setItem(getSavedKey(myId, postId), next ? "1" : "0");
+      window.dispatchEvent(new Event("storage"));
     } catch (err) {
       console.log("BOOKMARK ERROR:", err);
       setSaved(prev);
@@ -212,7 +269,9 @@ function PostCardBase({ post, onChanged }) {
             {ownerName}
           </Link>
 
-          <p className="text-xs text-slate-500">{created}</p>
+          <p className="text-xs text-slate-500">
+            {created} {sharedOriginal ? "• Shared a post" : ""}
+          </p>
         </div>
 
         <div className="relative">
@@ -278,7 +337,7 @@ function PostCardBase({ post, onChanged }) {
         </div>
       )}
 
-      {post?.image && (
+      {!sharedOriginal && post?.image && (
         <img
           src={post.image}
           alt="post"
@@ -288,6 +347,8 @@ function PostCardBase({ post, onChanged }) {
           referrerPolicy="no-referrer"
         />
       )}
+
+      {sharedOriginal && <SharedPreview original={sharedOriginal} />}
 
       <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-slate-500">
         <span>{likes.length} likes</span>
